@@ -10,6 +10,10 @@ import android.graphics.BitmapFactory;
 import android.os.Build;
 import android.os.IBinder;
 import android.widget.Toast;
+import android.content.Context;
+import java.util.Timer;
+import java.util.TimerTask;
+import android.os.Handler;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
@@ -26,18 +30,60 @@ public class MyForegroundService extends Service {
     public static final String WORK = "work";
     public static final String WORK_DOUBLE = "work_double";
 
-    //3. Wartości ustawień
     private String message;
     private Boolean show_time, do_work, double_speed;
+    private final long period = 2000; //2s
+
+    private Context ctx;
+    private Intent notificationIntent;
+    private PendingIntent pendingIntent;
+
+    private int counter;
+    private Timer timer;
+    private TimerTask timerTask;
+    final Handler handler = new Handler();
+
+    final Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
+                 Notification notification = new Notification.Builder(ctx, CHANNEL_ID)
+                      .setSmallIcon(R.drawable.ic_my_icon)
+                      .setContentTitle(getString(R.string.ser_title))
+                      .setShowWhen(show_time)
+                      .setContentText(message + " " + String.valueOf(counter))
+                      .setLargeIcon(BitmapFactory.decodeResource (getResources() , R.drawable.ic_my_icon ))
+                      .setContentIntent(pendingIntent)
+                      .build();
+
+                   NotificationManager manager = getSystemService(NotificationManager.class);
+                   manager.notify(1,notification);
+            }
+        };
 
     @Override
     public void onCreate() {
         super.onCreate();
+        counter = 0;
+        timer = new Timer();
+        timerTask = new TimerTask() {
+             @Override
+             public void run() {
+                  counter++;
+                  handler.post(runnable);
+             }
+        };
+        ctx = this;
+        notificationIntent = new Intent(ctx, MainActivity.class);
+        pendingIntent = PendingIntent.getActivity(this,0,notificationIntent,0);
     }
 
     @Override
     public void onDestroy() {
-        super.onDestroy();
+         handler.removeCallbacks(runnable);
+         timer.cancel();
+         timer.purge();
+         timer = null;
+         super.onDestroy();
     }
 
     @Nullable
@@ -58,10 +104,6 @@ public class MyForegroundService extends Service {
 
         createNotificationChannel();
 
-        Intent notificationIntent = new Intent(this, MainActivity.class);
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0);
-
-
         Notification notification = new Notification.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_my_icon)
                 .setContentTitle(getString(R.string.ser_title))
@@ -79,13 +121,9 @@ public class MyForegroundService extends Service {
     }
 
     private void doWork() {
-
-        String info = "Start working..."
-                + "\n show_time=" + show_time.toString()
-                + "\n do_work=" + do_work.toString()
-                + "\n double_speed=" + double_speed.toString();
-
-        Toast.makeText(this, info, Toast.LENGTH_LONG).show();
+         if(do_work) {
+                timer.schedule(timerTask, 0L, double_speed ? period / 2L : period);
+         }
     }
 
     @RequiresApi(api = Build.VERSION_CODES.O)
